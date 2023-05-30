@@ -32,9 +32,9 @@ def get_all_imports(
     ignore_dirs = [".hg", ".svn", ".git", ".tox", "__pycache__", "env", "venv"]
 
     if extra_ignore_dirs:
-        ignore_dirs_parsed = []
-        for e in extra_ignore_dirs:
-            ignore_dirs_parsed.append(os.path.basename(os.path.realpath(e)))
+        ignore_dirs_parsed = [
+            os.path.basename(os.path.realpath(e)) for e in extra_ignore_dirs
+        ]
         ignore_dirs.extend(ignore_dirs_parsed)
 
     had_errors = False
@@ -62,8 +62,6 @@ def get_all_imports(
                     elif isinstance(node, ast.ImportFrom):
                         modname = node.module
 
-                    # If the node was an import, look for pragmas
-                    pragmas = {}
                     if modname:
                         # Which lines are part of this statement
                         statement_lines = lines[node.lineno - 1:
@@ -73,10 +71,10 @@ def get_all_imports(
                         line = ''.join([l.rstrip('\\')
                                         for l in statement_lines])
 
-                        # If this line ends in a pragma add it
-                        m = re.match('^.*#upm package\\((.*)\\).*$', line)
-                        if m:
-                            pragmas['package'] = m.group(1)
+                        # If the node was an import, look for pragmas
+                        pragmas = {}
+                        if m := re.match('^.*#upm package\\((.*)\\).*$', line):
+                            pragmas['package'] = m[1]
 
                         # Record the module name
                         # Name could have been None if the import
@@ -88,7 +86,7 @@ def get_all_imports(
                 continue
 
     # Clean up imports
-    for name in raw_imports.keys():
+    for name in raw_imports:
         # Cleanup: We only want to first part of the import.
         # Ex: from django.conf --> django.conf. But we only want django
         # as an import.

@@ -8,7 +8,7 @@ try:
     package = sys.argv[1]
 
     # Determine the modules already installed
-    pre_modules = set([mod_info.name for mod_info in pkgutil.iter_modules()])
+    pre_modules = {mod_info.name for mod_info in pkgutil.iter_modules()}
 
     # Install the module under test
     subprocess.check_call([sys.executable, "-m", "pip", "install", package], stdout=subprocess.DEVNULL)

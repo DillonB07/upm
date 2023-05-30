@@ -11,9 +11,8 @@ def normalize_name(name):
     return name.replace('.', '-').replace('_', '-').lower()
 
 def load_json_file(filepath):
-    file = open(filepath)
-    data = json.load(file)
-    file.close()
+    with open(filepath) as file:
+        data = json.load(file)
     return data
 
 def reverse_mapping(dct):
@@ -31,21 +30,17 @@ os.makedirs(TEST_DIR, exist_ok=True)
 module_to_pypi = load_json_file("module_to_pypi.legacy.json")
 pypi_to_module = reverse_mapping(module_to_pypi)
 
-gen_go_file = open('../pypi_map.gen.go')
-gen_go = gen_go_file.read()
-gen_go_file.close()
-
-pkgs_file = open('../pkgs.json')
-pkgs = {}
-for line in pkgs_file:
-    info = json.loads(line)
-    norm_name = normalize_name(info['name'])
-    pkgs[norm_name] = {
-        'name': info['name'],
-        'error': info.get('error')
-    }
-pkgs_file.close()
-
+with open('../pypi_map.gen.go') as gen_go_file:
+    gen_go = gen_go_file.read()
+with open('../pkgs.json') as pkgs_file:
+    pkgs = {}
+    for line in pkgs_file:
+        info = json.loads(line)
+        norm_name = normalize_name(info['name'])
+        pkgs[norm_name] = {
+            'name': info['name'],
+            'error': info.get('error')
+        }
 skip_manual_checked = {
     'python-louvain': True,
     'pymilvus': True,
@@ -99,39 +94,37 @@ override = {
 
 def test_package(pkg):
     if pkg in skip_manual_checked:
-        print("skip %s" % pkg)
+        print(f"skip {pkg}")
         return
-    main_file = open(TEST_DIR + "/main.py", "w")
-    if pkg not in pypi_to_module:
-        if pkg in pkgs:
-            info = pkgs[pkg]
-            if info['error']:
-                print("%s test-errored" % pkg)
-            else:
-                str_to_look = '"' + info['name'] + '",'
-                if str_to_look in gen_go:
-                    print("%s added" % pkg)
+    with open(f"{TEST_DIR}/main.py", "w") as main_file:
+        if pkg not in pypi_to_module:
+            if pkg in pkgs:
+                info = pkgs[pkg]
+                if info['error']:
+                    print(f"{pkg} test-errored")
                 else:
-                    print("%s no-guess" % pkg)
+                    str_to_look = '"' + info['name'] + '",'
+                    if str_to_look in gen_go:
+                        print(f"{pkg} added")
+                    else:
+                        print(f"{pkg} no-guess")
+            else:
+                print(f"{pkg} missing")
+
+            return
+        if pkg in override:
+            mod = override[pkg]
         else:
-            print("%s missing" % pkg)
-
-        return
-    if pkg in override:
-        mod = override[pkg]
-    else:
-        mod = choose_module(pkg, pypi_to_module[pkg])
-    main_file.write("import %s" % mod)
-    main_file.close()
-
+            mod = choose_module(pkg, pypi_to_module[pkg])
+        main_file.write(f"import {mod}")
     proc1 = subprocess.run(["upm-old", "guess", "-f"], cwd=TEST_DIR, capture_output=True)
     proc2 = subprocess.run(["upm", "guess", "-f"], cwd=TEST_DIR, capture_output=True)
     if proc1.stdout == proc2.stdout:
-        print("%s ok" % pkg)
+        print(f"{pkg} ok")
     else:
-        print("%s failed" % pkg)
-        print("  Expected: %s" % proc1.stdout)
-        print("  Actual: %s" % proc2.stdout)
+        print(f"{pkg} failed")
+        print(f"  Expected: {proc1.stdout}")
+        print(f"  Actual: {proc2.stdout}")
 
 def choose_module(pkg, modules):
     best_score = 0
@@ -139,10 +132,7 @@ def choose_module(pkg, modules):
     for mod in modules:
         if mod == pkg:
             return mod
-        if mod.startswith("_"):
-            score = 1
-        else:
-            score = 2
+        score = 1 if mod.startswith("_") else 2
         if score > best_score:
             best_score = score
             choosen = mod
